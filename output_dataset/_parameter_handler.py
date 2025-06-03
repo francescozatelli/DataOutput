@@ -68,8 +68,8 @@ class Parameter(metaclass=ParameterMeta):
 		self.param_name = str(param_name)
 		self.verbose_name = str(verbose_name) if verbose_name is not None else str(param_name)
 		self.unit = str(unit) if unit is not None else '-'
-		self.scale = float(scale) if scale is not None else 1
-		self.offset = float(offset) if offset is not None else 0
+		self.scale = scale if scale is not None else 1
+		self.offset = offset if offset is not None else 0
 		Parameter._instances[param_name] = self  # Store the instance
 		#Parameter.save() # Save to the dictionary
 
