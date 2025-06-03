@@ -1,6 +1,7 @@
 import xarray as xr
 import numpy as np
 import sys 
+from sklearn.decomposition import PCA
 
 from typing import List, Tuple, Dict
 from typing import Optional, Union,Callable
@@ -153,6 +154,51 @@ def adjust_axis(data_output, mapping:Callable|str, adjust:Optional[int|str] = 'a
         new_dataset = dataset.assign_coords(new_coord_dict)
         new_dataset.attrs = old_attrs
         data_output.datasets[idx] = new_dataset
+
+def rotate_PCA(data_output,data_key,shift_median=False):
+    """Performs PCA on the data variable in the datasets and rotates the data accordingly.
+
+    Args:
+        data_output (DataOutput): DataOutput object to process.
+        data_key (str): string key to the data variable in the datasets.
+        shift_median (bool, optional): Shifts the projected data so that the
+            median of each component is zero. Defaults to False.
+    """
+    for dataset in data_output.datasets:
+        data_array = dataset[data_key]
+        x_data = np.real(data_array.values)
+        y_data = np.imag(data_array.values)
+        X = x_data.flatten()
+        Y = y_data.flatten()
+        shape = np.shape(x_data)
+        stacked_XY = np.column_stack((X, Y))
+        # perform PCA
+        pca = PCA(n_components=2, copy=True, svd_solver='full').fit(stacked_XY)
+        # Do the projection manually
+        # fix the found component to always have positive x-component.
+        pca_component = [
+            np.sign(pca.components_[0][0])*pca.components_[0][0],
+            np.sign(pca.components_[0][0])*pca.components_[0][1],
+            ]
+        pca_component_perp = [
+            -pca_component[1],
+            pca_component[0]
+            ]
+
+        # project the coordinates onto the PCA components
+        X_rot = np.dot(stacked_XY, pca_component)
+        Y_rot = np.dot(stacked_XY, pca_component_perp)
+        if shift_median:
+            # Shift the projected data so that the median of each component is zero.
+            X_rot = X_rot - np.median(X_rot)
+            Y_rot = Y_rot - np.median(Y_rot)
+
+        X_rot = np.reshape(X_rot,shape)
+        Y_rot = np.reshape(Y_rot,shape)
+        dataset[f"{data_key}_PCA_X"] = xr.DataArray(X_rot, coords = data_array.coords,attrs=data_array.attrs)
+        dataset[f"{data_key}_PCA_Y"] = xr.DataArray(Y_rot, coords = data_array.coords,attrs=data_array.attrs)
+        dataset[f"{data_key}_PCA_X"].attrs["long_name"] = f"{data_key}_PCA_X"
+        dataset[f"{data_key}_PCA_Y"].attrs["long_name"] = f"{data_key}_PCA_Y"
 
 def adjust_coordinate_offset(dataset, coord_key, offset):
     new_coord_dict = {}
